@@ -3,31 +3,37 @@ import {
   Post,
   UploadedFile,
   UseInterceptors,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { FileService } from './file.service';
-import { extname } from 'path';
+import { saveVideoToUploads } from 'uploads/file-uploader';
 
-@Controller('file')
+@Controller('api')
 export class FileController {
-  constructor(private readonly fileService: FileService) {}
-
   @Post('upload')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (_req, file, cb) => {
-          const uniqueSuffix =
-            Date.now() + '-' + Math.round(Math.random() * 1e9);
-          const ext = extname(file.originalname);
-          cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-        },
-      }),
-    }),
-  )
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    return this.fileService.processFile(file);
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadVideo(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new HttpException('No file uploaded', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      const isSaved = saveVideoToUploads(file.buffer, file.originalname);
+
+      if (isSaved) {
+        return { message: 'Video uploaded successfully' };
+      } else {
+        throw new HttpException(
+          'Failed to save video',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+    } catch (error) {
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }
